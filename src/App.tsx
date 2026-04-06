@@ -10,7 +10,8 @@ import type { Participant } from "./components/ParticipantGrid";
 import "./App.css";
 
 function AppContent() {
-  const { isLoggedIn, login, register, logout, chats, refreshChats, userId } = useAuth();
+  const { isLoggedIn, login, register, logout, chats, refreshChats, userId } =
+    useAuth();
   const [view, setView] = useState<"login" | "register" | "chats">("login");
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -35,7 +36,7 @@ function AppContent() {
       await register(
         fd.get("name") as string,
         fd.get("email") as string,
-        fd.get("password") as string
+        fd.get("password") as string,
       );
       setView("chats");
     } catch {
@@ -52,36 +53,42 @@ function AppContent() {
       await wsService.connect();
       wsService.subscribe(chat.name);
       wsService.onMessage((msg) => {
-        if (msg.payload.senderId === userId && 
-            msg.type !== WsMessageType.CALL_ACCEPTED && 
-            msg.type !== WsMessageType.CALL_REJECTED) return;
-        
+        if (
+          msg.payload.senderId === userId &&
+          msg.type !== WsMessageType.CALL_ACCEPTED &&
+          msg.type !== WsMessageType.CALL_REJECTED
+        )
+          return;
+
         const isTargetedMessage = msg.payload.targetId === userId;
-        const isAllowedTargeted = 
+        const isAllowedTargeted =
           msg.type === WsMessageType.CALL_ACCEPTED ||
           msg.type === WsMessageType.CALL_REJECTED;
-        
+
         if (isTargetedMessage && !isAllowedTargeted) return;
 
-        const isChatMessage = 
+        const isChatMessage =
           msg.type === WsMessageType.MESSAGE_CREATED ||
           msg.type === WsMessageType.CALL_INITIATED;
-        
+
         if (isChatMessage && msg.payload.chatId !== chat.id) return;
 
         if (msg.type === WsMessageType.MESSAGE_CREATED) {
-          const msgId = msg.payload.messageId 
-            ? msg.payload.messageId 
+          const msgId = msg.payload.messageId
+            ? msg.payload.messageId
             : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          
+
           setMessages((prev) => {
-            const existsById = prev.some(m => 
-              msg.payload.messageId && m.id === msg.payload.messageId
+            const existsById = prev.some(
+              (m) => msg.payload.messageId && m.id === msg.payload.messageId,
             );
-            const isDuplicate = existsById || prev.some(m => 
-              m.content === msg.payload.content && 
-              Math.abs(new Date(m.createdAt).getTime() - Date.now()) < 2000
-            );
+            const isDuplicate =
+              existsById ||
+              prev.some(
+                (m) =>
+                  m.content === msg.payload.content &&
+                  Math.abs(new Date(m.createdAt).getTime() - Date.now()) < 2000,
+              );
             if (isDuplicate) return prev;
             return [
               ...prev,
@@ -114,22 +121,46 @@ function AppContent() {
         {view === "login" ? (
           <form onSubmit={handleLogin}>
             <input name="login" placeholder="Login" required />
-            <input name="password" type="password" placeholder="Password" required />
+            <input
+              name="password"
+              type="password"
+              placeholder="Password"
+              required
+            />
             <button type="submit">Login</button>
           </form>
         ) : (
           <form onSubmit={handleRegister}>
             <input name="name" placeholder="Name" required />
             <input name="email" type="email" placeholder="Email" required />
-            <input name="password" type="password" placeholder="Password" required />
+            <input
+              name="password"
+              type="password"
+              placeholder="Password"
+              required
+            />
             <button type="submit">Register</button>
           </form>
         )}
         <p className="switch">
           {view === "login" ? (
-            <button onClick={() => { setView("register"); setError(""); }}>Need account?</button>
+            <button
+              onClick={() => {
+                setView("register");
+                setError("");
+              }}
+            >
+              Need account?
+            </button>
           ) : (
-            <button onClick={() => { setView("login"); setError(""); }}>Have account?</button>
+            <button
+              onClick={() => {
+                setView("login");
+                setError("");
+              }}
+            >
+              Have account?
+            </button>
           )}
         </p>
       </div>
@@ -143,7 +174,10 @@ function AppContent() {
         messages={messages}
         userId={userId}
         onSend={(content) => wsService.sendMessage(content, activeChat.id)}
-        onBack={() => { setActiveChat(null); wsService.disconnect(); }}
+        onBack={() => {
+          setActiveChat(null);
+          wsService.disconnect();
+        }}
       />
     );
   }
@@ -154,7 +188,9 @@ function AppContent() {
         <h1>Chats</h1>
         <div className="header-actions">
           <button onClick={() => setShowCreateModal(true)}>+ New Chat</button>
-          <button className="logout" onClick={logout}>Logout</button>
+          <button className="logout" onClick={logout}>
+            Logout
+          </button>
         </div>
       </header>
       <div className="chat-list">
@@ -175,7 +211,13 @@ function AppContent() {
   );
 }
 
-function CreateChatModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateChatModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const [name, setName] = useState("");
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<User[]>([]);
@@ -198,10 +240,10 @@ function CreateChatModal({ onClose, onCreated }: { onClose: () => void; onCreate
   }, [search]);
 
   const toggleUser = (user: User) => {
-    setSelectedUsers(prev => 
-      prev.find(u => u.id === user.id)
-        ? prev.filter(u => u.id !== user.id)
-        : [...prev, user]
+    setSelectedUsers((prev) =>
+      prev.find((u) => u.id === user.id)
+        ? prev.filter((u) => u.id !== user.id)
+        : [...prev, user],
     );
   };
 
@@ -212,12 +254,17 @@ function CreateChatModal({ onClose, onCreated }: { onClose: () => void; onCreate
     }
     setCreating(true);
     setError("");
+
+    const BASE = import.meta.env.BACKEND_URL ?? "";
     try {
-      const res = await fetch("http://localhost:9001/chats", {
+      const res = await fetch(`${BASE}/chats`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ name: name.trim(), users: selectedUsers.map(u => u.id) }),
+        body: JSON.stringify({
+          name: name.trim(),
+          users: selectedUsers.map((u) => u.id),
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -233,7 +280,7 @@ function CreateChatModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Create New Chat</h2>
           <button onClick={onClose}>×</button>
@@ -243,12 +290,12 @@ function CreateChatModal({ onClose, onCreated }: { onClose: () => void; onCreate
             type="text"
             placeholder="Chat name"
             value={name}
-            onChange={e => setName(e.target.value)}
+            onChange={(e) => setName(e.target.value)}
           />
-          
+
           {selectedUsers.length > 0 && (
             <div className="selected-users">
-              {selectedUsers.map(u => (
+              {selectedUsers.map((u) => (
                 <span key={u.id} className="chip">
                   {u.name}
                   <button onClick={() => toggleUser(u)}>×</button>
@@ -261,17 +308,17 @@ function CreateChatModal({ onClose, onCreated }: { onClose: () => void; onCreate
             type="text"
             placeholder="Search users..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
           />
 
           {loading && <p className="loading">Searching...</p>}
-          
+
           {!loading && users.length > 0 && (
             <div className="user-list">
-              {users.map(u => (
+              {users.map((u) => (
                 <div
                   key={u.id}
-                  className={`user-item ${selectedUsers.find(su => su.id === u.id) ? 'selected' : ''}`}
+                  className={`user-item ${selectedUsers.find((su) => su.id === u.id) ? "selected" : ""}`}
                   onClick={() => toggleUser(u)}
                 >
                   <span className="user-name">{u.name}</span>
@@ -280,11 +327,13 @@ function CreateChatModal({ onClose, onCreated }: { onClose: () => void; onCreate
               ))}
             </div>
           )}
-          
+
           {error && <p className="error-message">{error}</p>}
         </div>
         <div className="modal-footer">
-          <button className="cancel" onClick={onClose}>Cancel</button>
+          <button className="cancel" onClick={onClose}>
+            Cancel
+          </button>
           <button className="create" onClick={createChat} disabled={creating}>
             {creating ? "Creating..." : "Create Chat"}
           </button>
@@ -294,7 +343,13 @@ function CreateChatModal({ onClose, onCreated }: { onClose: () => void; onCreate
   );
 }
 
-function ChatView({ chat, messages, userId, onSend, onBack }: {
+function ChatView({
+  chat,
+  messages,
+  userId,
+  onSend,
+  onBack,
+}: {
   chat: Chat;
   messages: Message[];
   userId: number | null;
@@ -304,15 +359,26 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
   const [input, setInput] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const [callError, setCallError] = useState<string | null>(null);
-  
-  const [callStatus, setCallStatus] = useState<"idle" | "calling" | "ringing" | "connected">("idle");
+
+  const [callStatus, setCallStatus] = useState<
+    "idle" | "calling" | "ringing" | "connected"
+  >("idle");
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{ callerId: number; callerName: string; isAudioOnly?: boolean } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{
+    callerId: number;
+    callerName: string;
+    isAudioOnly?: boolean;
+  } | null>(null);
   const [isGroupCall, setIsGroupCall] = useState(false);
-  const [groupCallParticipants, setGroupCallParticipants] = useState<number[]>([]);
-  const [activeGroupCall, setActiveGroupCall] = useState<{ chatId: number; participants: number[] } | null>(null);
-  
+  const [groupCallParticipants, setGroupCallParticipants] = useState<number[]>(
+    [],
+  );
+  const [activeGroupCall, setActiveGroupCall] = useState<{
+    chatId: number;
+    participants: number[];
+  } | null>(null);
+
   const [audioMuted, setAudioMuted] = useState(false);
   const [callParticipants, setCallParticipants] = useState<Participant[]>([]);
 
@@ -339,9 +405,12 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
 
   useEffect(() => {
     const unsubscribe = wsService.onMessage((msg) => {
-      if (msg.payload.senderId === userId &&
-          msg.type !== WsMessageType.CALL_ACCEPTED &&
-          msg.type !== WsMessageType.CALL_REJECTED) return;
+      if (
+        msg.payload.senderId === userId &&
+        msg.type !== WsMessageType.CALL_ACCEPTED &&
+        msg.type !== WsMessageType.CALL_REJECTED
+      )
+        return;
 
       const isTargetedMessage = msg.payload.targetId === userId;
       const isAllowedTargeted =
@@ -360,7 +429,10 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
         case WsMessageType.CALL_INITIATED:
           if (msg.payload.chatId === chat.id) {
             setIsGroupCall(false);
-            setIncomingCall({ callerId: msg.payload.senderId || 0, callerName: "User" });
+            setIncomingCall({
+              callerId: msg.payload.senderId || 0,
+              callerName: "User",
+            });
             setCallStatus("ringing");
           }
           break;
@@ -371,24 +443,30 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
               const data = JSON.parse(msg.payload.content || "{}");
               const newParticipants = data.participants || [];
               const peerId = msg.payload.senderId;
-              
+
               const totalParticipants = newParticipants.length + 1;
               setIsGroupCall(totalParticipants > 2);
               setGroupCallParticipants([...newParticipants, peerId!]);
-              setActiveGroupCall({ chatId: msg.payload.chatId, participants: newParticipants });
+              setActiveGroupCall({
+                chatId: msg.payload.chatId,
+                participants: newParticipants,
+              });
               setIncomingCall({ callerId: peerId || 0, callerName: "User" });
               setCallStatus("ringing");
-              
+
               if (peerId && peerId !== userId) {
-                const peerUser = chat.users?.find(u => u.id === peerId);
+                const peerUser = chat.users?.find((u) => u.id === peerId);
                 if (peerUser) {
-                  setCallParticipants(prev => {
-                    if (!prev.find(p => p.id === peerId)) {
-                      return [...prev, { 
-                        id: peerUser.id, 
-                        name: peerUser.name, 
-                        isMuted: false 
-                      }];
+                  setCallParticipants((prev) => {
+                    if (!prev.find((p) => p.id === peerId)) {
+                      return [
+                        ...prev,
+                        {
+                          id: peerUser.id,
+                          name: peerUser.name,
+                          isMuted: false,
+                        },
+                      ];
                     }
                     return prev;
                   });
@@ -403,20 +481,34 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
         case WsMessageType.LEAVE_GROUP_CALL:
           if (msg.payload.chatId === chat.id) {
             const leaverId = msg.payload.senderId;
-            setGroupCallParticipants(prev => prev.filter(id => id !== leaverId));
-            setCallParticipants(prev => prev.filter(p => p.id !== leaverId));
+            setGroupCallParticipants((prev) =>
+              prev.filter((id) => id !== leaverId),
+            );
+            setCallParticipants((prev) =>
+              prev.filter((p) => p.id !== leaverId),
+            );
           }
           break;
 
         case WsMessageType.CALL_ACCEPTED:
-          if (callStatusRef.current === "calling" && msg.payload.targetId === userId) {
+          if (
+            callStatusRef.current === "calling" &&
+            msg.payload.targetId === userId
+          ) {
             setCallStatus("connected");
             const acceptedBy = msg.payload.senderId;
-            const acceptedUser = chat.users?.find(u => u.id === acceptedBy);
+            const acceptedUser = chat.users?.find((u) => u.id === acceptedBy);
             if (acceptedUser) {
-              setCallParticipants(prev => {
-                if (!prev.find(p => p.id === acceptedBy)) {
-                  return [...prev, { id: acceptedUser.id, name: acceptedUser.name, isMuted: false }];
+              setCallParticipants((prev) => {
+                if (!prev.find((p) => p.id === acceptedBy)) {
+                  return [
+                    ...prev,
+                    {
+                      id: acceptedUser.id,
+                      name: acceptedUser.name,
+                      isMuted: false,
+                    },
+                  ];
                 }
                 return prev;
               });
@@ -430,7 +522,10 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
           break;
 
         case WsMessageType.AUDIO_BROADCAST:
-          if (msg.payload.senderId !== userId && msg.payload.chatId === chat.id) {
+          if (
+            msg.payload.senderId !== userId &&
+            msg.payload.chatId === chat.id
+          ) {
             const pcmData = msg.payload.pcmData;
             if (pcmData && typeof pcmData === "string") {
               audioStreamingService.playReceivedAudio(pcmData);
@@ -457,28 +552,29 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
 
   const startCall = async () => {
     if (!userId) return;
-    
+
     const isGroup = (chat.users?.length || 0) > 2;
-    
+
     try {
       const stream = await webRTCService.getAudioStream();
       if (!stream) {
         setCallError("Could not access microphone");
         return;
       }
-      
+
       setLocalStream(stream);
       setCallStatus("calling");
-      
+
       const selfParticipant: Participant = {
         id: userId,
-        name: chat.users?.find(u => u.id === userId)?.name || "You",
+        name: chat.users?.find((u) => u.id === userId)?.name || "You",
         isMuted: false,
       };
       setCallParticipants([selfParticipant]);
-      
+
       if (isGroup) {
-        const participants = chat.users?.filter(u => u.id !== userId).map(u => u.id) || [];
+        const participants =
+          chat.users?.filter((u) => u.id !== userId).map((u) => u.id) || [];
         setIsGroupCall(true);
         setGroupCallParticipants(participants);
         setActiveGroupCall({ chatId: chat.id, participants });
@@ -486,7 +582,7 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
       } else {
         wsService.sendCallInitiated(chat.id, userId);
       }
-      
+
       onSend("Starting audio call");
     } catch (err) {
       console.error("Failed to start call:", err);
@@ -498,7 +594,7 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
     if (incomingCall && userId) {
       setIncomingCall(null);
       setCallStatus("calling");
-      
+
       try {
         const stream = await webRTCService.getAudioStream();
         if (!stream) {
@@ -506,22 +602,25 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
           setCallStatus("idle");
           return;
         }
-        
+
         setLocalStream(stream);
-        
+
         const selfParticipant: Participant = {
           id: userId,
-          name: chat.users?.find(u => u.id === userId)?.name || "You",
+          name: chat.users?.find((u) => u.id === userId)?.name || "You",
           isMuted: false,
         };
         setCallParticipants([selfParticipant]);
-        
-        await audioStreamingService.startStreaming((_event) => {
-          // Audio streaming started
-        }, (pcmData: ArrayBuffer) => {
-          wsService.sendAudioFrame(chat.id, pcmData, userId!);
-        });
-        
+
+        await audioStreamingService.startStreaming(
+          (_event) => {
+            // Audio streaming started
+          },
+          (pcmData: ArrayBuffer) => {
+            wsService.sendAudioFrame(chat.id, pcmData, userId!);
+          },
+        );
+
         wsService.sendCallAccepted(chat.id, incomingCall.callerId, userId);
         setCallStatus("connected");
       } catch (err) {
@@ -545,7 +644,10 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
     setIsMuted(muted);
   };
 
-  const handleDeviceChange = async (deviceId: string, kind: "audioinput" | "videoinput") => {
+  const handleDeviceChange = async (
+    deviceId: string,
+    kind: "audioinput" | "videoinput",
+  ) => {
     if (kind === "audioinput") {
       await webRTCService.switchAudioDevice(deviceId);
     }
@@ -587,7 +689,11 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
         <header>
           <button onClick={onBack}>← Back</button>
           <h2>{chat.name}</h2>
-          <button className="call-btn" onClick={startCall} disabled={callStatus !== "idle"}>
+          <button
+            className="call-btn"
+            onClick={startCall}
+            disabled={callStatus !== "idle"}
+          >
             📞
           </button>
         </header>
@@ -607,7 +713,11 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
           <div ref={endRef} />
         </div>
         <form onSubmit={handleSend}>
-          <input value={input} onChange={e => setInput(e.target.value)} placeholder="Type a message..." />
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type a message..."
+          />
           <button type="submit">Send</button>
         </form>
       </div>
@@ -617,7 +727,10 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
           chat={chat}
           callerName={incomingCall.callerName}
           isGroup={isGroupCall || (chat.users?.length || 0) >= 3}
-          participants={chat.users?.filter(u => groupCallParticipants.includes(u.id)) || []}
+          participants={
+            chat.users?.filter((u) => groupCallParticipants.includes(u.id)) ||
+            []
+          }
           onAccept={acceptCall}
           onReject={rejectCall}
         />

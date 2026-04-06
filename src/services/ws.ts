@@ -16,7 +16,7 @@ export const WsMessageType = {
   ERROR: "ERROR",
 } as const;
 
-export type WsMessageType = typeof WsMessageType[keyof typeof WsMessageType];
+export type WsMessageType = (typeof WsMessageType)[keyof typeof WsMessageType];
 
 export interface WsMessagePayload {
   content?: string;
@@ -35,6 +35,9 @@ export interface WsMessage {
 
 type MessageHandler = (msg: WsMessage) => void;
 
+const WS_BACKEND_URL =
+  import.meta.env.WS_BACKEND_URL ?? "ws://localhost:9001/ws";
+
 class WsService {
   private ws: WebSocket | null = null;
   private handlers: MessageHandler[] = [];
@@ -42,7 +45,7 @@ class WsService {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.ws = new WebSocket("ws://localhost:9001/ws");
+      this.ws = new WebSocket(WS_BACKEND_URL);
 
       this.ws.onopen = () => {
         this.pendingSubscriptions.forEach((name) => this.subscribe(name));
@@ -51,21 +54,30 @@ class WsService {
       };
 
       this.ws.onerror = (e) => reject(e);
-      
+
       this.ws.onmessage = (e) => {
         try {
           if (e.data instanceof ArrayBuffer) {
-            this.handlers.forEach((h) => h({
-              id: "binary",
-              type: WsMessageType.AUDIO_BROADCAST,
-              payload: { pcmData: e.data },
-            } as WsMessage));
+            this.handlers.forEach((h) =>
+              h({
+                id: "binary",
+                type: WsMessageType.AUDIO_BROADCAST,
+                payload: { pcmData: e.data },
+              } as WsMessage),
+            );
             return;
           }
-          
+
           const msg: WsMessage = JSON.parse(e.data);
           if (msg.type !== WsMessageType.AUDIO_BROADCAST) {
-            console.log("📥 WS RECEIVED:", msg.type, "from:", msg.payload.senderId, "target:", msg.payload.targetId);
+            console.log(
+              "📥 WS RECEIVED:",
+              msg.type,
+              "from:",
+              msg.payload.senderId,
+              "target:",
+              msg.payload.targetId,
+            );
           }
           this.handlers.forEach((h) => h(msg));
         } catch {}
@@ -95,27 +107,49 @@ class WsService {
     this.ws?.send(JSON.stringify(msg));
   }
 
-  sendCallInitiated(chatId: number, callerId: number, participants: number[] = []) {
+  sendCallInitiated(
+    chatId: number,
+    callerId: number,
+    participants: number[] = [],
+  ) {
     const msg: WsMessage = {
       id: crypto.randomUUID(),
       type: WsMessageType.CALL_INITIATED,
       payload: { content: "Starting new call", chatId, senderId: callerId },
     };
-    console.log("📤 WS SENT:", msg.type, "chatId:", chatId, "callerId:", callerId, "participants:", participants);
+    console.log(
+      "📤 WS SENT:",
+      msg.type,
+      "chatId:",
+      chatId,
+      "callerId:",
+      callerId,
+      "participants:",
+      participants,
+    );
     this.ws?.send(JSON.stringify(msg));
   }
 
-  sendGroupCallStarted(chatId: number, initiatorId: number, participants: number[]) {
+  sendGroupCallStarted(
+    chatId: number,
+    initiatorId: number,
+    participants: number[],
+  ) {
     const msg: WsMessage = {
       id: crypto.randomUUID(),
       type: WsMessageType.JOIN_GROUP_CALL,
-      payload: { 
-        content: JSON.stringify({ participants }), 
-        chatId, 
-        senderId: initiatorId 
+      payload: {
+        content: JSON.stringify({ participants }),
+        chatId,
+        senderId: initiatorId,
       },
     };
-    console.log("📤 WS SENT: JOIN_GROUP_CALL chatId:", chatId, "participants:", participants);
+    console.log(
+      "📤 WS SENT: JOIN_GROUP_CALL chatId:",
+      chatId,
+      "participants:",
+      participants,
+    );
     this.ws?.send(JSON.stringify(msg));
   }
 
@@ -125,7 +159,12 @@ class WsService {
       type: WsMessageType.LEAVE_GROUP_CALL,
       payload: { content: "Call ended", chatId, senderId: userId },
     };
-    console.log("📤 WS SENT: LEAVE_GROUP_CALL chatId:", chatId, "userId:", userId);
+    console.log(
+      "📤 WS SENT: LEAVE_GROUP_CALL chatId:",
+      chatId,
+      "userId:",
+      userId,
+    );
     this.ws?.send(JSON.stringify(msg));
   }
 
@@ -133,9 +172,21 @@ class WsService {
     const msg: WsMessage = {
       id: crypto.randomUUID(),
       type: WsMessageType.CALL_ACCEPTED,
-      payload: { content: "Call accepted", chatId, senderId: calleeId, targetId: callerId },
+      payload: {
+        content: "Call accepted",
+        chatId,
+        senderId: calleeId,
+        targetId: callerId,
+      },
     };
-    console.log("📤 WS SENT:", msg.type, "chatId:", chatId, "target:", callerId);
+    console.log(
+      "📤 WS SENT:",
+      msg.type,
+      "chatId:",
+      chatId,
+      "target:",
+      callerId,
+    );
     this.ws?.send(JSON.stringify(msg));
   }
 
@@ -143,9 +194,21 @@ class WsService {
     const msg: WsMessage = {
       id: crypto.randomUUID(),
       type: WsMessageType.CALL_REJECTED,
-      payload: { content: "Call rejected", chatId, senderId: calleeId, targetId: callerId },
+      payload: {
+        content: "Call rejected",
+        chatId,
+        senderId: calleeId,
+        targetId: callerId,
+      },
     };
-    console.log("📤 WS SENT:", msg.type, "chatId:", chatId, "target:", callerId);
+    console.log(
+      "📤 WS SENT:",
+      msg.type,
+      "chatId:",
+      chatId,
+      "target:",
+      callerId,
+    );
     this.ws?.send(JSON.stringify(msg));
   }
 
@@ -155,7 +218,18 @@ class WsService {
       type: WsMessageType.OFFER,
       payload: { content: sdp, chatId, targetId, senderId },
     };
-    console.log("📤 WS SENT:", msg.type, "chatId:", chatId, "target:", targetId, "sender:", senderId, "sdpType:", JSON.parse(sdp).type);
+    console.log(
+      "📤 WS SENT:",
+      msg.type,
+      "chatId:",
+      chatId,
+      "target:",
+      targetId,
+      "sender:",
+      senderId,
+      "sdpType:",
+      JSON.parse(sdp).type,
+    );
     this.ws?.send(JSON.stringify(msg));
   }
 
@@ -165,18 +239,45 @@ class WsService {
       type: WsMessageType.ANSWER,
       payload: { content: sdp, chatId, targetId, senderId },
     };
-    console.log("📤 WS SENT:", msg.type, "chatId:", chatId, "target:", targetId, "sender:", senderId, "sdpType:", JSON.parse(sdp).type);
+    console.log(
+      "📤 WS SENT:",
+      msg.type,
+      "chatId:",
+      chatId,
+      "target:",
+      targetId,
+      "sender:",
+      senderId,
+      "sdpType:",
+      JSON.parse(sdp).type,
+    );
     this.ws?.send(JSON.stringify(msg));
   }
 
-  sendIceCandidate(chatId: number, candidate: string, targetId: number, senderId: number) {
+  sendIceCandidate(
+    chatId: number,
+    candidate: string,
+    targetId: number,
+    senderId: number,
+  ) {
     const msg: WsMessage = {
       id: crypto.randomUUID(),
       type: WsMessageType.ICE_CANDIDATE,
       payload: { content: candidate, chatId, targetId, senderId },
     };
     const parsed = JSON.parse(candidate);
-    console.log("📤 WS SENT:", msg.type, "chatId:", chatId, "target:", targetId, "sender:", senderId, "candidateType:", parsed.type);
+    console.log(
+      "📤 WS SENT:",
+      msg.type,
+      "chatId:",
+      chatId,
+      "target:",
+      targetId,
+      "sender:",
+      senderId,
+      "candidateType:",
+      parsed.type,
+    );
     this.ws?.send(JSON.stringify(msg));
   }
 
@@ -189,7 +290,7 @@ class WsService {
 
   sendAudioFrame(chatId: number, pcmData: ArrayBuffer, senderId: number) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    
+
     const base64 = this.arrayBufferToBase64(pcmData);
     const msg = {
       id: crypto.randomUUID(),
@@ -219,3 +320,4 @@ class WsService {
 }
 
 export const wsService = new WsService();
+
