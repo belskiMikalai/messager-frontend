@@ -1,0 +1,303 @@
+.video-call-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.88);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 16px;
+}
+
+.video-call-modal {
+  width: min(960px, 100%);
+  background: linear-gradient(165deg, #1e293b 0%, #0f172a 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  overflow: hidden;
+  box-shadow:
+    0 25px 50px -12px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.video-call-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.video-call-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.video-call-header h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.call-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+
+.call-status.calling,
+.call-status.ringing {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+}
+
+.call-status.connected {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.video-call-content {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #020617;
+}
+
+.remote-video-container {
+  position: absolute;
+  inset: 0;
+}
+
+.remote-video-container.has-remote .remote-video {
+  opacity: 1;
+}
+
+.remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.remote-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  color: #94a3b8;
+  font-size: 0.95rem;
+  background: radial-gradient(ellipse at center, rgba(30, 41, 59, 0.9) 0%, #020617 70%);
+}
+
+.remote-audio-only {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  pointer-events: none;
+}
+
+.local-video-container {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  width: min(200px, 32vw);
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  background: #020617;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.local-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.local-video.video-off {
+  display: none;
+}
+
+.video-off-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.video-call-controls {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  padding: 18px 20px 22px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.control-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(30, 41, 59, 0.9);
+  color: #e2e8f0;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.control-btn:hover {
+  transform: translateY(-2px);
+  background: rgba(51, 65, 85, 0.95);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.control-btn.active {
+  background: rgba(248, 113, 113, 0.25);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
+.control-btn.end-call {
+  background: rgba(220, 38, 38, 0.9);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fff;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.control-btn.end-call:hover {
+  background: #b91c1c;
+}
+
+.incoming-overlay {
+  align-items: center;
+}
+
+.incoming-call-modal {
+  position: relative;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 36px 32px 28px;
+  text-align: center;
+  max-width: 360px;
+  width: 100%;
+  box-shadow:
+    0 25px 50px -12px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  overflow: hidden;
+}
+
+.incoming-pulse {
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(circle at 50% 30%, rgba(59, 130, 246, 0.2), transparent 55%);
+  animation: pulse-glow 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+.incoming-call-content {
+  position: relative;
+  margin-bottom: 28px;
+}
+
+.caller-avatar {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.35));
+}
+
+.incoming-call-content h3 {
+  font-size: 1.15rem;
+  margin-bottom: 8px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.caller-line {
+  color: #e2e8f0;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.incoming-call-content .chat-name {
+  color: #94a3b8;
+  font-size: 0.875rem;
+}
+
+.incoming-call-actions {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+}
+
+.incoming-call-actions button {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: none;
+  font-size: 1.35rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.incoming-call-actions button:hover {
+  transform: scale(1.08);
+}
+
+.reject-btn {
+  background: linear-gradient(145deg, #ef4444, #b91c1c);
+  color: #fff;
+  box-shadow: 0 10px 25px rgba(220, 38, 38, 0.35);
+}
+
+.accept-btn {
+  background: linear-gradient(145deg, #22c55e, #15803d);
+  color: #fff;
+  box-shadow: 0 10px 25px rgba(22, 163, 74, 0.35);
+}
