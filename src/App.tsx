@@ -3,8 +3,10 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { messagesApi, usersApi } from "./services/api";
 import { wsService, WsMessageType } from "./services/ws";
 import { webRTCService } from "./services/webrtc";
+import { audioStreamingService } from "./services/audioStream";
 import { VideoCallModal, IncomingCallModal } from "./components/VideoCallModal";
 import type { Chat, Message, User } from "./types";
+import type { Participant } from "./components/ParticipantGrid";
 import "./App.css";
 
 function AppContent() {
@@ -50,52 +52,29 @@ function AppContent() {
       await wsService.connect();
       wsService.subscribe(chat.name);
       wsService.onMessage((msg) => {
-        // Ignore own messages (but not our own call responses)
         if (msg.payload.senderId === userId && 
             msg.type !== WsMessageType.CALL_ACCEPTED && 
             msg.type !== WsMessageType.CALL_REJECTED) return;
         
-        // For targetId messages, only allow OFFER/ANSWER/ICE/CALL_ACCEPTED/CALL_REJECTED
         const isTargetedMessage = msg.payload.targetId === userId;
         const isAllowedTargeted = 
-          msg.type === WsMessageType.OFFER ||
-          msg.type === WsMessageType.ANSWER ||
-          msg.type === WsMessageType.ICE_CANDIDATE ||
           msg.type === WsMessageType.CALL_ACCEPTED ||
           msg.type === WsMessageType.CALL_REJECTED;
         
         if (isTargetedMessage && !isAllowedTargeted) return;
 
-        // For chat messages, only process if in current chat
         const isChatMessage = 
           msg.type === WsMessageType.MESSAGE_CREATED ||
           msg.type === WsMessageType.CALL_INITIATED;
         
         if (isChatMessage && msg.payload.chatId !== chat.id) return;
 
-        // Handle messages - with deduplication
         if (msg.type === WsMessageType.MESSAGE_CREATED) {
-          // Skip if content looks like WebRTC signaling
-          const content = msg.payload.content;
-          if (content && content.trim().startsWith('{')) {
-            try {
-              const parsed = JSON.parse(content);
-              // Check for WebRTC SDP or ICE candidates - don't show in chat
-              if (parsed.sdp || parsed.type === 'offer' || parsed.type === 'answer' || 
-                  parsed.candidate || (parsed.candidates && parsed.candidates.length > 0) ||
-                  (typeof parsed === 'string' && parsed.includes('candidate'))) {
-                return; // Skip this message - don't show in chat
-              }
-            } catch {}
-          }
-          
-          // Generate unique ID - always use a combination to ensure uniqueness
           const msgId = msg.payload.messageId 
             ? msg.payload.messageId 
             : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
           
           setMessages((prev) => {
-            // Deduplicate - check if message already exists by id or by content + recent time
             const existsById = prev.some(m => 
               msg.payload.messageId && m.id === msg.payload.messageId
             );
@@ -103,14 +82,12 @@ function AppContent() {
               m.content === msg.payload.content && 
               Math.abs(new Date(m.createdAt).getTime() - Date.now()) < 2000
             );
-            if (isDuplicate) {
-              return prev;
-            }
+            if (isDuplicate) return prev;
             return [
               ...prev,
               {
                 id: msgId,
-                content: msg.payload.content,
+                content: msg.payload.content || "",
                 chatId: chat.id,
                 senderId: msg.payload.senderId || 0,
                 createdAt: new Date().toISOString(),
@@ -330,10 +307,14 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
   
   const [callStatus, setCallStatus] = useState<"idle" | "calling" | "ringing" | "connected">("idle");
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
-  const [incomingCall, setIncomingCall] = useState<{ callerId: number; callerName: string } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ callerId: number; callerName: string; isAudioOnly?: boolean } | null>(null);
+  const [isGroupCall, setIsGroupCall] = useState(false);
+  const [groupCallParticipants, setGroupCallParticipants] = useState<number[]>([]);
+  const [activeGroupCall, setActiveGroupCall] = useState<{ chatId: number; participants: number[] } | null>(null);
+  
+  const [audioMuted, setAudioMuted] = useState(false);
+  const [callParticipants, setCallParticipants] = useState<Participant[]>([]);
 
   const callStatusRef = useRef(callStatus);
   useEffect(() => {
@@ -342,103 +323,28 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
 
   const endCall = useCallback(() => {
     webRTCService.endCall();
+    audioStreamingService.stopStreaming();
     setCallStatus("idle");
     setLocalStream(null);
-    setRemoteStream(null);
     setIsMuted(false);
-    setIsVideoOff(false);
-  }, []);
-
-  const initiateWebRTCCall = useCallback(async (calleeId: number) => {
-    const offer = await webRTCService.createOffer();
-    if (offer) {
-      wsService.sendOffer(chat.id, JSON.stringify(offer), calleeId, userId!);
-      setCallStatus("connected");
+    setIsGroupCall(false);
+    setGroupCallParticipants([]);
+    setAudioMuted(false);
+    setCallParticipants([]);
+    if (activeGroupCall) {
+      wsService.sendGroupCallEnded(activeGroupCall.chatId, userId!);
+      setActiveGroupCall(null);
     }
-  }, [chat.id, userId]);
-
-  const handleOffer = useCallback(async (sdp: string, fromId: number) => {
-    await webRTCService.initTURN();
-
-    let stream: MediaStream | null = null;
-    try {
-      stream = await webRTCService.startCall(chat.id, (event, data) => {
-        if (event === "remote_stream") {
-          setRemoteStream(data as MediaStream);
-          setCallStatus("connected");
-        } else if (event === "ended") {
-          endCall();
-        }
-      }, (candidate) => {
-        wsService.sendIceCandidate(chat.id, JSON.stringify(candidate), fromId, userId!);
-      });
-    } catch (err) {
-      console.error("Failed to start call (camera access):", err);
-      wsService.sendCallRejected(chat.id, fromId, userId!);
-      setIncomingCall(null);
-      setCallStatus("idle");
-      setCallError("Could not access camera/microphone. Please check permissions.");
-      return;
-    }
-    
-    if (!stream) {
-      wsService.sendCallRejected(chat.id, fromId, userId!);
-      setIncomingCall(null);
-      setCallStatus("idle");
-      setCallError("Could not access camera/microphone");
-      return;
-    }
-    
-    setLocalStream(stream);
-
-    const offer = JSON.parse(sdp);
-    const answer = await webRTCService.handleOffer(offer);
-    if (answer) {
-      wsService.sendAnswer(chat.id, JSON.stringify(answer), fromId, userId!);
-      setCallStatus("connected");
-    }
-  }, [chat.id, endCall, userId]);
-
-  const handleAnswer = useCallback(async (sdp: string) => {
-    const answer = JSON.parse(sdp);
-    await webRTCService.handleAnswer(answer);
-    setCallStatus("connected");
-  }, []);
-
-  const handleIceCandidate = useCallback(async (candidate: string) => {
-    const cand = JSON.parse(candidate);
-    await webRTCService.addIceCandidate(cand);
-  }, []);
-
-  const callHandlersRef = useRef({
-    initiateWebRTCCall,
-    handleOffer,
-    handleAnswer,
-    handleIceCandidate,
-    endCall,
-  });
-  callHandlersRef.current = {
-    initiateWebRTCCall,
-    handleOffer,
-    handleAnswer,
-    handleIceCandidate,
-    endCall,
-  };
+  }, [activeGroupCall, userId]);
 
   useEffect(() => {
     const unsubscribe = wsService.onMessage((msg) => {
-      const { initiateWebRTCCall: doOffer, handleOffer, handleAnswer, handleIceCandidate, endCall: hangUp } =
-        callHandlersRef.current;
-
       if (msg.payload.senderId === userId &&
           msg.type !== WsMessageType.CALL_ACCEPTED &&
           msg.type !== WsMessageType.CALL_REJECTED) return;
 
       const isTargetedMessage = msg.payload.targetId === userId;
       const isAllowedTargeted =
-        msg.type === WsMessageType.OFFER ||
-        msg.type === WsMessageType.ANSWER ||
-        msg.type === WsMessageType.ICE_CANDIDATE ||
         msg.type === WsMessageType.CALL_ACCEPTED ||
         msg.type === WsMessageType.CALL_REJECTED;
 
@@ -452,42 +358,83 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
 
       switch (msg.type) {
         case WsMessageType.CALL_INITIATED:
-          setIncomingCall({ callerId: msg.payload.senderId || 0, callerName: "User" });
-          setCallStatus("ringing");
+          if (msg.payload.chatId === chat.id) {
+            setIsGroupCall(false);
+            setIncomingCall({ callerId: msg.payload.senderId || 0, callerName: "User" });
+            setCallStatus("ringing");
+          }
+          break;
+
+        case WsMessageType.JOIN_GROUP_CALL:
+          if (msg.payload.chatId === chat.id) {
+            try {
+              const data = JSON.parse(msg.payload.content || "{}");
+              const newParticipants = data.participants || [];
+              const peerId = msg.payload.senderId;
+              
+              const totalParticipants = newParticipants.length + 1;
+              setIsGroupCall(totalParticipants > 2);
+              setGroupCallParticipants([...newParticipants, peerId!]);
+              setActiveGroupCall({ chatId: msg.payload.chatId, participants: newParticipants });
+              setIncomingCall({ callerId: peerId || 0, callerName: "User" });
+              setCallStatus("ringing");
+              
+              if (peerId && peerId !== userId) {
+                const peerUser = chat.users?.find(u => u.id === peerId);
+                if (peerUser) {
+                  setCallParticipants(prev => {
+                    if (!prev.find(p => p.id === peerId)) {
+                      return [...prev, { 
+                        id: peerUser.id, 
+                        name: peerUser.name, 
+                        isMuted: false 
+                      }];
+                    }
+                    return prev;
+                  });
+                }
+              }
+            } catch (e) {
+              console.error("Failed to parse JOIN_GROUP_CALL:", e);
+            }
+          }
+          break;
+
+        case WsMessageType.LEAVE_GROUP_CALL:
+          if (msg.payload.chatId === chat.id) {
+            const leaverId = msg.payload.senderId;
+            setGroupCallParticipants(prev => prev.filter(id => id !== leaverId));
+            setCallParticipants(prev => prev.filter(p => p.id !== leaverId));
+          }
           break;
 
         case WsMessageType.CALL_ACCEPTED:
           if (callStatusRef.current === "calling" && msg.payload.targetId === userId) {
-            void doOffer(msg.payload.senderId!);
+            setCallStatus("connected");
+            const acceptedBy = msg.payload.senderId;
+            const acceptedUser = chat.users?.find(u => u.id === acceptedBy);
+            if (acceptedUser) {
+              setCallParticipants(prev => {
+                if (!prev.find(p => p.id === acceptedBy)) {
+                  return [...prev, { id: acceptedUser.id, name: acceptedUser.name, isMuted: false }];
+                }
+                return prev;
+              });
+            }
           }
           break;
 
         case WsMessageType.CALL_REJECTED:
           setCallError(msg.payload.content || "Call was rejected");
-          hangUp();
+          endCall();
           break;
 
-        case WsMessageType.OFFER:
-          if (msg.payload.targetId === userId) {
-            handleOffer(msg.payload.content, msg.payload.senderId!).catch((err) => {
-              console.error("Failed to handle offer:", err);
-              wsService.sendCallRejected(chat.id, msg.payload.senderId!, userId!);
-              setIncomingCall(null);
-              setCallStatus("idle");
-              setCallError("Could not access camera/microphone");
-            });
-          }
-          break;
-
-        case WsMessageType.ANSWER:
-          if (msg.payload.targetId === userId) {
-            void handleAnswer(msg.payload.content);
-          }
-          break;
-
-        case WsMessageType.ICE_CANDIDATE:
-          if (msg.payload.targetId === userId) {
-            void handleIceCandidate(msg.payload.content);
+        case WsMessageType.AUDIO_BROADCAST:
+          if (msg.payload.senderId !== userId && msg.payload.chatId === chat.id) {
+            const pcmData = msg.payload.pcmData;
+            if (pcmData && typeof pcmData === "string") {
+              audioStreamingService.playReceivedAudio(pcmData);
+            }
           }
           break;
       }
@@ -496,7 +443,7 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
     return () => {
       unsubscribe();
     };
-  }, [chat.id, userId]);
+  }, [chat.id, userId, chat.users, endCall]);
 
   useEffect(() => {
     return () => {
@@ -511,27 +458,39 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
   const startCall = async () => {
     if (!userId) return;
     
-    await webRTCService.initTURN();
+    const isGroup = (chat.users?.length || 0) > 2;
     
-    const stream = await webRTCService.startCall(chat.id, (event, data) => {
-      if (event === "remote_stream") {
-        setRemoteStream(data as MediaStream);
-        setCallStatus("connected");
-      } else if (event === "ended") {
-        endCall();
+    try {
+      const stream = await webRTCService.getAudioStream();
+      if (!stream) {
+        setCallError("Could not access microphone");
+        return;
       }
-    }, (candidate) => {
-      const callee = chat.users?.find(u => u.id !== userId);
-      if (callee) {
-        wsService.sendIceCandidate(chat.id, JSON.stringify(candidate), callee.id, userId!);
-      }
-    });
-
-    if (stream) {
+      
       setLocalStream(stream);
       setCallStatus("calling");
-      wsService.sendCallInitiated(chat.id, userId);
-      onSend("Starting new call");
+      
+      const selfParticipant: Participant = {
+        id: userId,
+        name: chat.users?.find(u => u.id === userId)?.name || "You",
+        isMuted: false,
+      };
+      setCallParticipants([selfParticipant]);
+      
+      if (isGroup) {
+        const participants = chat.users?.filter(u => u.id !== userId).map(u => u.id) || [];
+        setIsGroupCall(true);
+        setGroupCallParticipants(participants);
+        setActiveGroupCall({ chatId: chat.id, participants });
+        wsService.sendGroupCallStarted(chat.id, userId, participants);
+      } else {
+        wsService.sendCallInitiated(chat.id, userId);
+      }
+      
+      onSend("Starting audio call");
+    } catch (err) {
+      console.error("Failed to start call:", err);
+      setCallError("Could not access microphone");
     }
   };
 
@@ -539,7 +498,37 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
     if (incomingCall && userId) {
       setIncomingCall(null);
       setCallStatus("calling");
-      wsService.sendCallAccepted(chat.id, incomingCall.callerId, userId);
+      
+      try {
+        const stream = await webRTCService.getAudioStream();
+        if (!stream) {
+          setCallError("Could not access microphone");
+          setCallStatus("idle");
+          return;
+        }
+        
+        setLocalStream(stream);
+        
+        const selfParticipant: Participant = {
+          id: userId,
+          name: chat.users?.find(u => u.id === userId)?.name || "You",
+          isMuted: false,
+        };
+        setCallParticipants([selfParticipant]);
+        
+        await audioStreamingService.startStreaming((_event) => {
+          // Audio streaming started
+        }, (pcmData: ArrayBuffer) => {
+          wsService.sendAudioFrame(chat.id, pcmData, userId!);
+        });
+        
+        wsService.sendCallAccepted(chat.id, incomingCall.callerId, userId);
+        setCallStatus("connected");
+      } catch (err) {
+        console.error("Failed to get local media:", err);
+        setCallError("Could not access microphone");
+        setCallStatus("idle");
+      }
     }
   };
 
@@ -556,9 +545,15 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
     setIsMuted(muted);
   };
 
-  const toggleVideo = () => {
-    const videoOff = webRTCService.toggleVideo();
-    setIsVideoOff(videoOff);
+  const handleDeviceChange = async (deviceId: string, kind: "audioinput" | "videoinput") => {
+    if (kind === "audioinput") {
+      await webRTCService.switchAudioDevice(deviceId);
+    }
+  };
+
+  const toggleAudioMute = () => {
+    const muted = audioStreamingService.toggleMute();
+    setAudioMuted(muted);
   };
 
   const handleSend = (e: React.FormEvent) => {
@@ -570,52 +565,59 @@ function ChatView({ chat, messages, userId, onSend, onBack }: {
   };
 
   return (
-    <div className="chat-view">
-      <header>
-        <button onClick={onBack}>← Back</button>
-        <h2>{chat.name}</h2>
-        <button className="call-btn" onClick={startCall} disabled={callStatus !== "idle"}>
-          📹
-        </button>
-      </header>
-      {callError && (
-        <div className="call-error">
-          {callError}
-          <button onClick={() => setCallError(null)}>×</button>
+    <div className="chat-view-container">
+      {callStatus !== "idle" && localStream && (
+        <div className="call-panel">
+          <VideoCallModal
+            chat={chat}
+            localStream={localStream}
+            status={callStatus}
+            isMuted={isMuted}
+            onEndCall={endCall}
+            onToggleMute={toggleMute}
+            onDeviceChange={handleDeviceChange}
+            audioMuted={audioMuted}
+            onToggleAudioMute={toggleAudioMute}
+            participants={callParticipants}
+            localUserId={userId || 0}
+          />
         </div>
       )}
-      <div className="messages">
-        {messages.map((m, i) => (
-          <div key={`${String(m.id)}-${i}`} className="message">
-            <p>{m.content}</p>
-            <span>{new Date(m.createdAt).toLocaleTimeString()}</span>
+      <div className="chat-panel">
+        <header>
+          <button onClick={onBack}>← Back</button>
+          <h2>{chat.name}</h2>
+          <button className="call-btn" onClick={startCall} disabled={callStatus !== "idle"}>
+            📞
+          </button>
+        </header>
+        {callError && (
+          <div className="call-error">
+            {callError}
+            <button onClick={() => setCallError(null)}>×</button>
           </div>
-        ))}
-        <div ref={endRef} />
+        )}
+        <div className="messages">
+          {messages.map((m, i) => (
+            <div key={`${String(m.id)}-${i}`} className="message">
+              <p>{m.content}</p>
+              <span>{new Date(m.createdAt).toLocaleTimeString()}</span>
+            </div>
+          ))}
+          <div ref={endRef} />
+        </div>
+        <form onSubmit={handleSend}>
+          <input value={input} onChange={e => setInput(e.target.value)} placeholder="Type a message..." />
+          <button type="submit">Send</button>
+        </form>
       </div>
-      <form onSubmit={handleSend}>
-        <input value={input} onChange={e => setInput(e.target.value)} placeholder="Type a message..." />
-        <button type="submit">Send</button>
-      </form>
-
-      {callStatus !== "idle" && localStream && (
-        <VideoCallModal
-          chat={chat}
-          localStream={localStream}
-          remoteStream={remoteStream}
-          status={callStatus}
-          isMuted={isMuted}
-          isVideoOff={isVideoOff}
-          onEndCall={endCall}
-          onToggleMute={toggleMute}
-          onToggleVideo={toggleVideo}
-        />
-      )}
 
       {incomingCall && (
         <IncomingCallModal
           chat={chat}
           callerName={incomingCall.callerName}
+          isGroup={isGroupCall || (chat.users?.length || 0) >= 3}
+          participants={chat.users?.filter(u => groupCallParticipants.includes(u.id)) || []}
           onAccept={acceptCall}
           onReject={rejectCall}
         />

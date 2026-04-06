@@ -1,71 +1,74 @@
-import { useRef, useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { Chat } from "../types";
+import type { Participant } from "./ParticipantGrid";
+import { ParticipantGrid } from "./ParticipantGrid";
 import "./VideoCallModal.css";
+
+interface MediaDeviceInfo {
+  deviceId: string;
+  label: string;
+  kind: "audioinput" | "videoinput";
+}
 
 interface VideoCallModalProps {
   chat: Chat;
   localStream: MediaStream | null;
-  remoteStream: MediaStream | null;
   status: "calling" | "ringing" | "connected";
   isMuted: boolean;
-  isVideoOff: boolean;
   onEndCall: () => void;
   onToggleMute: () => void;
-  onToggleVideo: () => void;
-}
-
-function attachAndPlay(
-  video: HTMLVideoElement | null,
-  stream: MediaStream | null,
-) {
-  if (!video) return;
-  if (!stream) {
-    video.srcObject = null;
-    return;
-  }
-  video.srcObject = stream;
-  void video.play().catch(() => {});
+  onDeviceChange?: (deviceId: string, kind: "audioinput" | "videoinput") => void;
+  audioMuted?: boolean;
+  onToggleAudioMute?: () => void;
+  participants?: Participant[];
+  localUserId?: number;
 }
 
 export function VideoCallModal({
   chat,
   localStream,
-  remoteStream,
   status,
   isMuted,
-  isVideoOff,
   onEndCall,
   onToggleMute,
-  onToggleVideo,
+  onDeviceChange,
+  audioMuted = false,
+  onToggleAudioMute,
+  participants = [],
+  localUserId = 0,
 }: VideoCallModalProps) {
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedMic, setSelectedMic] = useState<string>("");
 
   useEffect(() => {
-    attachAndPlay(localVideoRef.current, localStream);
-  }, [localStream]);
+    async function loadDevices() {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const audio = devices
+          .filter(d => d.kind === "audioinput")
+          .map(d => ({ deviceId: d.deviceId, label: d.label || `Microphone ${d.deviceId.slice(0, 8)}`, kind: "audioinput" as const }));
+        setAudioDevices(audio);
+        if (audio.length) setSelectedMic(audio[0].deviceId);
+      } catch (e) {
+        console.error("Failed to enumerate devices:", e);
+      }
+    }
+    loadDevices();
+  }, []);
 
-  useEffect(() => {
-    attachAndPlay(remoteVideoRef.current, remoteStream);
-  }, [remoteStream]);
-
-  const hasLiveRemote = Boolean(
-    remoteStream?.getTracks().some((t) => t.readyState === "live"),
-  );
-  const hasRemoteVideo = Boolean(
-    remoteStream
-      ?.getVideoTracks()
-      .some((t) => t.readyState === "live" && t.enabled),
-  );
-  const showRemoteSurface = status === "connected" && hasLiveRemote;
-  const remoteWaiting = status === "connected" && !hasLiveRemote;
+  const handleMicChange = (deviceId: string) => {
+    setSelectedMic(deviceId);
+    onDeviceChange?.(deviceId, "audioinput");
+  };
 
   return (
     <div
       className="video-call-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label="Video call"
+      aria-label="Audio call"
     >
       <div className="video-call-modal">
         <div className="video-call-header">
@@ -80,41 +83,11 @@ export function VideoCallModal({
         </div>
 
         <div className="video-call-content">
-          <div
-            className={`remote-video-container ${showRemoteSurface ? "has-remote" : ""}`}
-          >
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="remote-video"
-            />
-            {showRemoteSurface && !hasRemoteVideo && (
-              <div className="remote-audio-only">
-                Connected — remote camera off
-              </div>
-            )}
-            {!showRemoteSurface && (
-              <div className="remote-placeholder">
-                {remoteWaiting && <p>Waiting for remote media…</p>}
-                {status === "calling" && <p>Connecting to call…</p>}
-                {status === "ringing" && <p>Waiting for answer…</p>}
-              </div>
-            )}
-          </div>
-
-          <div className="local-video-container">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className={`local-video ${isVideoOff ? "video-off" : ""}`}
-            />
-            {isVideoOff && (
-              <div className="video-off-placeholder">Camera off</div>
-            )}
-          </div>
+          <ParticipantGrid
+            participants={participants}
+            localUserId={localUserId}
+            localStream={localStream}
+          />
         </div>
 
         <div className="video-call-controls">
@@ -129,12 +102,19 @@ export function VideoCallModal({
           </button>
           <button
             type="button"
-            className={`control-btn ${isVideoOff ? "active" : ""}`}
-            onClick={onToggleVideo}
-            title={isVideoOff ? "Turn camera on" : "Turn camera off"}
-            aria-pressed={isVideoOff}
+            className="control-btn"
+            onClick={() => setShowSettings(!showSettings)}
+            title="Settings"
           >
-            {isVideoOff ? "📵" : "📹"}
+            ⚙️
+          </button>
+          <button
+            type="button"
+            className={`control-btn ${audioMuted ? "active" : ""}`}
+            onClick={onToggleAudioMute}
+            title={audioMuted ? "Unmute" : "Mute"}
+          >
+            {audioMuted ? "🔇" : "🔊"}
           </button>
           <button
             type="button"
@@ -145,6 +125,20 @@ export function VideoCallModal({
             ✕
           </button>
         </div>
+        
+        {showSettings && (
+          <div className="device-settings-panel">
+            <h4>Device Settings</h4>
+            <div className="device-option">
+              <label>🎤 Microphone</label>
+              <select value={selectedMic} onChange={e => handleMicChange(e.target.value)}>
+                {audioDevices.map(d => (
+                  <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -153,6 +147,8 @@ export function VideoCallModal({
 interface IncomingCallModalProps {
   chat: Chat;
   callerName: string;
+  isGroup?: boolean;
+  participants?: { id: number; name: string }[];
   onAccept: () => void;
   onReject: () => void;
 }
@@ -160,6 +156,8 @@ interface IncomingCallModalProps {
 export function IncomingCallModal({
   chat,
   callerName,
+  isGroup = false,
+  participants = [],
   onAccept,
   onReject,
 }: IncomingCallModalProps) {
@@ -174,11 +172,16 @@ export function IncomingCallModal({
         <div className="incoming-pulse" aria-hidden />
         <div className="incoming-call-content">
           <div className="caller-avatar" aria-hidden>
-            📹
+            {isGroup ? "👥" : "📞"}
           </div>
-          <h3>Incoming call</h3>
+          <h3>{isGroup ? "Group call" : "Incoming call"}</h3>
           <p className="caller-line">{callerName}</p>
           <span className="chat-name">in {chat.name}</span>
+          {isGroup && participants.length > 0 && (
+            <div className="group-participants">
+              <span className="participants-label">{participants.length} in call</span>
+            </div>
+          )}
         </div>
         <div className="incoming-call-actions">
           <button
@@ -193,9 +196,9 @@ export function IncomingCallModal({
             type="button"
             className="accept-btn"
             onClick={onAccept}
-            title="Accept"
+            title={isGroup ? "Join" : "Accept"}
           >
-            ✓
+            {isGroup ? "📞" : "✓"}
           </button>
         </div>
       </div>
