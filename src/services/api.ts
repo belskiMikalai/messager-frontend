@@ -2,7 +2,7 @@ import type { SignInDto, RegisterDto } from "../dto/auth.dto";
 import type { ChatDto } from "../dto/chat.dto";
 import type { User, Chat, Message, ApiResponse } from "../types";
 
-const BASE = "http://localhost:9001";
+const BASE = import.meta.env.BACKEND_URL ?? "";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -38,13 +38,11 @@ export const authApi = {
       body: JSON.stringify({}),
     }),
 
-  me: () =>
-    request<ApiResponse<User>>("/me"),
+  me: () => request<ApiResponse<User>>("/me"),
 };
 
 export const usersApi = {
-  search: (name: string) =>
-    request<ApiResponse<User[]>>(`/users/${name}`),
+  search: (name: string) => request<ApiResponse<User[]>>(`/users/${name}`),
 };
 
 export const chatsApi = {
@@ -54,11 +52,11 @@ export const chatsApi = {
       body: JSON.stringify(data),
     }),
 
-  getAll: () =>
-    request<ApiResponse<Chat[]>>("/chats"),
+  getAll: () => request<ApiResponse<Chat[]>>("/chats"),
 };
 
 export const messagesApi = {
   getByChat: (chatId: number) =>
     request<ApiResponse<Message[]>>(`/messages/${chatId}`),
 };
+
