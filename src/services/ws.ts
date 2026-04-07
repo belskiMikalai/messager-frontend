@@ -36,7 +36,7 @@ export interface WsMessage {
 type MessageHandler = (msg: WsMessage) => void;
 
 const WS_BACKEND_URL =
-  import.meta.env.WS_BACKEND_URL ?? "ws://localhost:9001/ws";
+  import.meta.env.VITE_WS_BACKEND_URL ?? "ws://localhost:9001/ws";
 
 class WsService {
   private ws: WebSocket | null = null;

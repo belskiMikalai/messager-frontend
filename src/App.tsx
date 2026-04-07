@@ -255,7 +255,7 @@ function CreateChatModal({
     setCreating(true);
     setError("");
 
-    const BASE = import.meta.env.BACKEND_URL ?? "";
+    const BASE = import.meta.env.VITE_BACKEND_URL ?? "localhost:9001";
     try {
       const res = await fetch(`${BASE}/chats`, {
         method: "POST",
