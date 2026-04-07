@@ -5,7 +5,7 @@ import { wsService, WsMessageType } from "./services/ws";
 import { webRTCService } from "./services/webrtc";
 import { audioStreamingService } from "./services/audioStream";
 import { VideoCallModal, IncomingCallModal } from "./components/VideoCallModal";
-import type { Chat, Message, User } from "./types";
+import { VITE_BACKEND_URL, type Chat, type Message, type User } from "./types";
 import type { Participant } from "./components/ParticipantGrid";
 import "./App.css";
 
@@ -255,7 +255,7 @@ function CreateChatModal({
     setCreating(true);
     setError("");
 
-    const BASE = import.meta.env.VITE_BACKEND_URL ?? "localhost:9001";
+    const BASE = VITE_BACKEND_URL;
     try {
       const res = await fetch(`${BASE}/chats`, {
         method: "POST",

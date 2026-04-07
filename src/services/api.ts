@@ -1,8 +1,14 @@
 import type { SignInDto, RegisterDto } from "../dto/auth.dto";
 import type { ChatDto } from "../dto/chat.dto";
-import type { User, Chat, Message, ApiResponse } from "../types";
+import {
+  type User,
+  type Chat,
+  type Message,
+  type ApiResponse,
+  VITE_BACKEND_URL,
+} from "../types";
 
-const BASE = import.meta.env.VITE_BACKEND_URL ?? "localhost:9001";
+const BASE = VITE_BACKEND_URL;
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {

@@ -1,3 +1,5 @@
+import { VITE_WS_BACKEND_URL } from "../types";
+
 export const WsMessageType = {
   MESSAGE_CREATED: "MESSAGE_CREATED",
   SEND_MESSAGE: "SEND_MESSAGE",
@@ -35,8 +37,7 @@ export interface WsMessage {
 
 type MessageHandler = (msg: WsMessage) => void;
 
-const WS_BACKEND_URL =
-  import.meta.env.VITE_WS_BACKEND_URL ?? "ws://localhost:9001/ws";
+const WS_BACKEND_URL = VITE_WS_BACKEND_URL;
 
 class WsService {
   private ws: WebSocket | null = null;
