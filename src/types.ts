@@ -1,5 +1,5 @@
 export const VITE_BACKEND_URL =
-  "https://shares-weblog-surrounded-becoming.trycloudflare.com/";
+  "https://shares-weblog-surrounded-becoming.trycloudflare.com";
 export const VITE_WS_BACKEND_URL =
   "wss://shares-weblog-surrounded-becoming.trycloudflare.com/ws";
 export interface User {
