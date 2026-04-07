@@ -2,7 +2,9 @@ import type { SignInDto, RegisterDto } from "../dto/auth.dto";
 import type { ChatDto } from "../dto/chat.dto";
 import type { User, Chat, Message, ApiResponse } from "../types";
 
-const BASE = import.meta.env.BACKEND_URL ?? "";
+const BASE =
+  import.meta.env.BACKEND_URL ??
+  "https://towers-played-inquiry-continuous.trycloudflare.com/";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
